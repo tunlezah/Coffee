@@ -14,8 +14,9 @@ enum class Temperature(val raw: Int) {
 
 /**
  * Definition of one settable parameter of a product. Values are expressed in their
- * natural units (millilitres for [SettingKind.WATER]/[SettingKind.MILK], 1–8 for
- * strength, raw 0/1/2 for temperature). The on-wire byte = value / [step].
+ * natural units (millilitres for [SettingKind.WATER], seconds for [SettingKind.MILK] /
+ * [SettingKind.MILK_BREAK], 1–8 for strength, raw 0/1/2 for temperature). The on-wire
+ * byte = value / [step].
  *
  * @param argument the byte offset in the 18-byte start frame (the XML "F"+n value).
  * @param step     the XML @Step; 1 means "store value directly".

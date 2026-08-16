@@ -6,9 +6,12 @@ data class Alert(val bit: Int, val name: String) {
     val isBlocking: Boolean get() = bit in BLOCKING_BITS
 
     companion object {
-        // Coffee-ready (13) and the maintenance reminders (32–34) are informational,
-        // not blocking. The rest of the documented E8 bits prevent a clean brew.
-        val BLOCKING_BITS = setOf(0, 1, 2, 3, 4, 5, 6, 7, 10)
+        // The bits the EF533 (E8) machine file marks Type="block": tray/water/grounds
+        // interlocks (0–4), fill system (8), please wait (17), program mode (29),
+        // error status (30), close tap (40) and switch-off delay (47). Everything else
+        // — including "no beans" (10), which the file marks Type="info" — is
+        // informational and does not prevent starting a product.
+        val BLOCKING_BITS = setOf(0, 1, 2, 3, 4, 8, 17, 29, 30, 40, 47)
     }
 }
 

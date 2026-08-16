@@ -65,11 +65,23 @@ class JuraCommandsTest {
     }
 
     @Test
-    fun `cappuccino sets milk byte at offset 5`() {
+    fun `cappuccino sets milk seconds verbatim at offset 5`() {
         val capp = assertNotNull(e8.product(0x04))
         assertTrue(capp.isMilkBased)
-        val frame = JuraCommands.buildStartFrame(capp, BrewParameters(milkMl = 50), key = 0x2A)
-        assertEquals(10, frame[5].toInt() and 0xFF) // 50ml / 5, F5
+        // Milk amounts are seconds sent verbatim (EF533 XML @Step=1).
+        val frame = JuraCommands.buildStartFrame(capp, BrewParameters(milkSeconds = 50), key = 0x2A)
+        assertEquals(50, frame[5].toInt() and 0xFF)
+    }
+
+    @Test
+    fun `latte macchiato applies XML defaults including milk break`() {
+        val latte = assertNotNull(e8.product(0x07))
+        val frame = JuraCommands.buildStartFrame(latte, BrewParameters(), key = 0x2A)
+        assertEquals(4, frame[3].toInt() and 0xFF)   // strength default 4, F3
+        assertEquals(9, frame[4].toInt() and 0xFF)   // water default 45ml / 5, F4
+        assertEquals(22, frame[5].toInt() and 0xFF)  // milk default 22s, F5
+        assertEquals(2, frame[7].toInt() and 0xFF)   // temperature default High, F7
+        assertEquals(30, frame[11].toInt() and 0xFF) // milk break default 30s, F11
     }
 
     @Test

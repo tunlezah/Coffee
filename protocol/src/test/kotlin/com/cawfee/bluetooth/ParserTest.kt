@@ -55,12 +55,21 @@ class ParserTest {
     }
 
     @Test
-    fun `status with no beans is not ready to brew`() {
-        // bit 10 -> byteIndex 2, bitInByte 7-(10&7)=7-2=5 -> 0b00100000 = 0x20
+    fun `status with fill water is not ready to brew`() {
+        // bit 1 (fill water, Type="block" in the machine file) -> byte 1, 0x40
+        val decoded = Hex.decode("00 40 00")
+        val status = MachineStatusParser.parseDecoded(decoded, JuraMachineCatalog.E8)
+        assertTrue(status.needsWater)
+        assertFalse(status.isReadyToBrew)
+    }
+
+    @Test
+    fun `no beans is informational per the EF533 machine file`() {
+        // bit 10 is Type="info" in EF533/1.0.xml -> byteIndex 2, bit 0x20
         val decoded = Hex.decode("00 00 20")
         val status = MachineStatusParser.parseDecoded(decoded, JuraMachineCatalog.E8)
         assertTrue(status.noBeans)
-        assertFalse(status.isReadyToBrew)
+        assertTrue(status.isReadyToBrew)
     }
 
     @Test
@@ -75,22 +84,26 @@ class ParserTest {
     }
 
     @Test
-    fun `statistics parse skips the key echo byte`() {
-        // Decoded payloads always carry the key echo at byte 0 (JuraCipher invariant);
-        // the 3-byte counters start at byte 1. encDec is involutive, so encoding the
-        // expected decoded buffer produces the raw bytes the machine would send.
+    fun `statistics parse decodes counters from byte 0 - no key echo in statistics data`() {
+        // Unlike status/progress reads, Statistics Data does NOT begin with the key
+        // echo: the Jutta-Proto doc's example response starts `00014E` = total count.
+        // encDec is involutive, so encoding the expected decoded buffer produces the
+        // raw bytes the machine would send.
         val key = 0x2A
-        val decoded = byteArrayOf(key.toByte()) + Hex.decode("00014E 000027")
+        val decoded = Hex.decode("00014E 000000 000027")
         val raw = com.cawfee.bluetooth.encryption.JuraCipher.encDec(decoded, key)
         val stats = StatisticsParser.parse(raw, key)
         assertEquals(334L, stats.total)
-        assertEquals(39L, stats.counts[1])
+        assertEquals(39L, stats.counts[2])
     }
 
     @Test
-    fun `statistics readiness reflects busy markers`() {
-        assertFalse(StatisticsParser.isReady(Hex.decode("0E 00 00")))
+    fun `statistics readiness checks the raw probe byte 1 busy marker`() {
+        // Matches AlexxIT/Jura: the RAW (still-encoded) Statistics Command read is
+        // busy while byte 1 == 0xE1.
         assertFalse(StatisticsParser.isReady(Hex.decode("00 E1 00")))
+        assertFalse(StatisticsParser.isReady(ByteArray(0)))
+        assertTrue(StatisticsParser.isReady(Hex.decode("0E 00 00")))
         assertTrue(StatisticsParser.isReady(Hex.decode("00 01 4E")))
     }
 }

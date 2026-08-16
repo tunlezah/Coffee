@@ -7,14 +7,15 @@ import com.cawfee.bluetooth.models.Temperature
 
 /**
  * User-chosen brew parameters. Any null value falls back to the product's default.
- * Units are natural (millilitres for water/milk, 1–8 for strength).
+ * Units are natural: millilitres for water, SECONDS for milk/milk break (per the JOE
+ * machine file, milk amounts are durations), 1–8 for strength.
  */
 data class BrewParameters(
     val strength: Int? = null,
     val waterMl: Int? = null,
     val temperature: Temperature? = null,
-    val milkMl: Int? = null,
-    val milkBreak: Int? = null,
+    val milkSeconds: Int? = null,
+    val milkBreakSeconds: Int? = null,
 )
 
 /**
@@ -41,8 +42,8 @@ object JuraCommands {
                 SettingKind.STRENGTH -> params.strength ?: setting.default
                 SettingKind.WATER -> params.waterMl ?: setting.default
                 SettingKind.TEMPERATURE -> params.temperature?.raw ?: setting.default
-                SettingKind.MILK -> params.milkMl ?: setting.default
-                SettingKind.MILK_BREAK -> params.milkBreak ?: setting.default
+                SettingKind.MILK -> params.milkSeconds ?: setting.default
+                SettingKind.MILK_BREAK -> params.milkBreakSeconds ?: setting.default
             }
             data[setting.argument] = setting.toByte(natural).toByte()
         }

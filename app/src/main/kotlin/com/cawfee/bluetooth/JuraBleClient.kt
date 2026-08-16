@@ -208,8 +208,9 @@ class JuraBleClient @Inject constructor(
             conn.write(JuraGatt.SERVICE_CONTROL, JuraGatt.CHAR_STATISTICS_CMD, JuraCommands.statisticsRequest(daily, key))
             delay(JuraGatt.Timing.STATS_INITIAL_WAIT_MS)
             repeat(JuraGatt.Timing.STATS_MAX_POLLS) {
+                // isReady inspects the RAW probe read — do not decrypt it.
                 val probe = conn.read(JuraGatt.SERVICE_CONTROL, JuraGatt.CHAR_STATISTICS_CMD)
-                if (StatisticsParser.isReady(com.cawfee.bluetooth.encryption.JuraCipher.decrypt(probe, key))) {
+                if (StatisticsParser.isReady(probe)) {
                     val data = conn.read(JuraGatt.SERVICE_CONTROL, JuraGatt.CHAR_STATISTICS_DATA)
                     _machine.value = _machine.value.copy(statistics = StatisticsParser.parse(data, key))
                     return@runCatching
