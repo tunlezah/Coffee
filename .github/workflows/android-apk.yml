@@ -84,7 +84,10 @@ jobs:
       - name: Verify APK signature
         run: |
           APK=app/build/outputs/apk/release/app-release.apk
-          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$APK"
+          # Runners ship several build-tools versions; pick the newest apksigner
+          # (an unquoted glob would expand to multiple paths and break the command).
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs "$APK"
           mkdir -p dist
           cp "$APK" dist/cawfee-release.apk
 
