@@ -4,7 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cawfee.data.PreferencesRepository
@@ -28,10 +28,13 @@ class MainActivity : ComponentActivity() {
             )
             val dark = when (prefs.appearance) {
                 AppearancePreference.LIGHT -> false
-                AppearancePreference.DARK -> true
-                AppearancePreference.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+                AppearancePreference.DARK, AppearancePreference.OLED -> true
+                AppearancePreference.SYSTEM -> isSystemInDarkTheme()
             }
-            CawfeeTheme(darkTheme = dark) {
+            CawfeeTheme(
+                darkTheme = dark,
+                oledBlack = prefs.appearance == AppearancePreference.OLED,
+            ) {
                 CawfeeApp()
             }
         }

@@ -75,6 +75,19 @@ class ParserTest {
     }
 
     @Test
+    fun `statistics parse skips the key echo byte`() {
+        // Decoded payloads always carry the key echo at byte 0 (JuraCipher invariant);
+        // the 3-byte counters start at byte 1. encDec is involutive, so encoding the
+        // expected decoded buffer produces the raw bytes the machine would send.
+        val key = 0x2A
+        val decoded = byteArrayOf(key.toByte()) + Hex.decode("00014E 000027")
+        val raw = com.cawfee.bluetooth.encryption.JuraCipher.encDec(decoded, key)
+        val stats = StatisticsParser.parse(raw, key)
+        assertEquals(334L, stats.total)
+        assertEquals(39L, stats.counts[1])
+    }
+
+    @Test
     fun `statistics readiness reflects busy markers`() {
         assertFalse(StatisticsParser.isReady(Hex.decode("0E 00 00")))
         assertFalse(StatisticsParser.isReady(Hex.decode("00 E1 00")))

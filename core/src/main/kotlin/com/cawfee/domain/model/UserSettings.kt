@@ -10,5 +10,8 @@ enum class UserMode(val displayName: String) {
 enum class AppearancePreference(val displayName: String) {
     SYSTEM("System"),
     LIGHT("Light"),
-    DARK("Dark");
+    DARK("Dark"),
+
+    /** Dark theme with pure-black backgrounds for OLED displays. */
+    OLED("OLED");
 }

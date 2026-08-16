@@ -10,6 +10,7 @@ import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.os.Build
 import com.cawfee.bluetooth.protocol.JuraGatt
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -69,7 +70,8 @@ class JuraGattConnection(
         }
 
         override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
-            mtuDeferred?.complete(mtu)
+            if (status == BluetoothGatt.GATT_SUCCESS) mtuDeferred?.complete(mtu)
+            else mtuDeferred?.completeExceptionally(IllegalStateException("MTU negotiation failed: $status"))
         }
 
         // API 33+ read callback (carries value directly).
@@ -118,10 +120,17 @@ class JuraGattConnection(
 
     @SuppressLint("MissingPermission")
     suspend fun connect(timeoutMs: Long = 10_000L) = opMutex.withLock {
-        connectDeferred = CompletableDeferred()
+        val deferred = CompletableDeferred<Unit>()
+        connectDeferred = deferred
         // Direct connection (autoConnect=false) is faster (§16.3).
         gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
-        withTimeout(timeoutMs) { connectDeferred!!.await() }
+        try {
+            withTimeout(timeoutMs) { deferred.await() }
+        } finally {
+            // Once connect resolves (or times out), a STATE_DISCONNECTED callback must
+            // route to onUnexpectedDisconnect — never to a stale/orphaned deferred.
+            connectDeferred = null
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -183,12 +192,13 @@ class JuraGattConnection(
                 ?: error("CCCD descriptor missing on $charUuid")
             descriptorDeferred = CompletableDeferred()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                gatt?.writeDescriptor(cccd, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+                val rc = gatt?.writeDescriptor(cccd, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+                require(rc == BluetoothGatt.GATT_SUCCESS) { "writeDescriptor returned $rc" }
             } else {
                 @Suppress("DEPRECATION")
                 run {
                     cccd.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                    gatt?.writeDescriptor(cccd)
+                    require(gatt?.writeDescriptor(cccd) == true) { "writeDescriptor returned false" }
                 }
             }
             withTimeout(timeoutMs) { descriptorDeferred!!.await() }
@@ -196,6 +206,15 @@ class JuraGattConnection(
 
     @SuppressLint("MissingPermission")
     fun close() {
+        // Fail any in-flight operation immediately instead of letting it hold
+        // opMutex until its timeout expires against a dead connection.
+        val cause = CancellationException("Connection closed")
+        connectDeferred?.cancel(cause); connectDeferred = null
+        servicesDeferred?.cancel(cause); servicesDeferred = null
+        mtuDeferred?.cancel(cause); mtuDeferred = null
+        readDeferred?.cancel(cause); readDeferred = null
+        writeDeferred?.cancel(cause); writeDeferred = null
+        descriptorDeferred?.cancel(cause); descriptorDeferred = null
         runCatching { gatt?.disconnect() }
         runCatching { gatt?.close() }
         gatt = null

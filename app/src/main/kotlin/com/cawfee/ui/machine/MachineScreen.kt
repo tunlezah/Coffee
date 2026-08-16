@@ -27,6 +27,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cawfee.bluetooth.BluetoothPermissions
 import com.cawfee.bluetooth.ConnectionState
@@ -51,6 +53,7 @@ fun MachineScreen(viewModel: MachineViewModel = hiltViewModel()) {
     val connectionState by viewModel.connectionState.collectAsStateWithLifecycle()
     val devices by viewModel.devices.collectAsStateWithLifecycle()
     val machine by viewModel.machine.collectAsStateWithLifecycle()
+    val scanError by viewModel.scanError.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     var hasPermissions by remember {
@@ -61,6 +64,20 @@ fun MachineScreen(viewModel: MachineViewModel = hiltViewModel()) {
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { result -> hasPermissions = result.values.all { it } }
+
+    // Permissions can be revoked from system settings while we're backgrounded.
+    LifecycleResumeEffect(Unit) {
+        hasPermissions = BluetoothPermissions.required.all {
+            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+        }
+        onPauseOrDispose { }
+    }
+
+    // The ViewModel outlives this screen when switching tabs (saveState navigation),
+    // so stop the battery-hungry LE scan whenever the screen leaves composition.
+    DisposableEffect(Unit) {
+        onDispose { viewModel.stopScan() }
+    }
 
     Scaffold(
         topBar = {
@@ -109,6 +126,7 @@ fun MachineScreen(viewModel: MachineViewModel = hiltViewModel()) {
                 else -> ScanPanel(
                     state = state,
                     devices = devices,
+                    scanError = scanError,
                     onScan = { viewModel.startScan() },
                     onStop = { viewModel.stopScan() },
                     onConnect = { viewModel.connect(it) },
@@ -142,6 +160,7 @@ private fun StatusRow(text: String, showSpinner: Boolean = false) {
 private fun ScanPanel(
     state: ConnectionState,
     devices: List<DiscoveredJura>,
+    scanError: String?,
     onScan: () -> Unit,
     onStop: () -> Unit,
     onConnect: (DiscoveredJura) -> Unit,
@@ -150,6 +169,9 @@ private fun ScanPanel(
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = onScan) { Text("Scan for machines") }
         if (scanning) OutlinedButton(onClick = onStop) { Text("Stop") }
+    }
+    if (scanError != null) {
+        Text("Scan failed: $scanError")
     }
     if (state is ConnectionState.Failed) {
         Text("Failed: ${state.message}")
@@ -193,6 +215,9 @@ private fun ConnectedPanel(
                     if (status.needsFilter) AssistChip(onClick = {}, label = { Text("Filter") })
                 }
             }
+            machine.progress?.let { progress ->
+                if (progress.isCoffeeReady) Text("Coffee ready — enjoy!")
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Barista lock", Modifier.weight(1f))
                 Switch(checked = machine.baristaLocked, onCheckedChange = { viewModel.setBaristaLock(it) })
@@ -212,7 +237,9 @@ private fun ConnectedPanel(
                     Text(product.name)
                     FilledTonalButton(
                         onClick = { viewModel.brew(product, strength = null, waterMl = null, temperature = null) },
-                        enabled = status?.isReadyToBrew != false,
+                        // Require a confirmed ready status — before the first status read
+                        // completes (status == null) brewing must stay disabled.
+                        enabled = status?.isReadyToBrew == true,
                     ) { Text("Start") }
                 }
             }
