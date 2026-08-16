@@ -34,22 +34,23 @@ object StatisticsParser {
         return Statistics(counts)
     }
 
-    fun parse(raw: ByteArray, key: Int): Statistics {
-        val decoded = JuraCipher.decrypt(raw, key)
-        // Byte 0 of a decoded payload is the key echo (see JuraCipher) — the counters
-        // start at byte 1, same as MachineStatusParser / ProgressParser.
-        return parseDecoded(if (decoded.isEmpty()) decoded else decoded.copyOfRange(1, decoded.size))
-    }
+    /**
+     * Decrypt and parse a Statistics Data read. Unlike Machine Status / Product
+     * Progress, the decoded statistics payload does NOT begin with the key echo — the
+     * 3-byte counters start at byte 0. This matches the Jutta-Proto protocol doc
+     * (example response `00014E …` where `0x00014E` is the total product count) and the
+     * AlexxIT/Jura implementation, both verified against real machines.
+     */
+    fun parse(raw: ByteArray, key: Int): Statistics =
+        parseDecoded(JuraCipher.decrypt(raw, key))
 
     /**
-     * Statistics readiness check (§8.4): the engine is busy while the (decoded) status
-     * byte [1] == 0xE1 or the payload begins with 0x0E. Poll until this returns true.
-     * Byte 0 of a valid decode is the key echo, so the payload starts at index 1.
+     * Statistics readiness probe. After the request is written, poll the Statistics
+     * Command characteristic and pass the RAW (still-encoded) read here: byte 1 equal
+     * to 0xE1 means the statistics engine is still busy. This is the AlexxIT/Jura
+     * behavior, field-proven on real machines (Jutta-Proto's README and code disagree
+     * with each other on this check, so the working implementation wins).
      */
-    fun isReady(decoded: ByteArray): Boolean {
-        if (decoded.isEmpty()) return false
-        if (decoded[0].toInt() and 0xFF == 0x0E) return false
-        if (decoded.size > 1 && (decoded[1].toInt() and 0xFF).let { it == 0xE1 || it == 0x0E }) return false
-        return true
-    }
+    fun isReady(raw: ByteArray): Boolean =
+        raw.size > 1 && (raw[1].toInt() and 0xFF) != 0xE1
 }
