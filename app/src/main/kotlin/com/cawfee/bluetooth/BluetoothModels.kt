@@ -4,6 +4,7 @@ import android.Manifest
 import android.os.Build
 import com.cawfee.bluetooth.models.JuraAdvertisement
 import com.cawfee.bluetooth.models.MachineStatus
+import com.cawfee.bluetooth.parser.BrewProgress
 import com.cawfee.bluetooth.parser.Statistics
 
 /** A Jura machine discovered during scanning. */
@@ -30,6 +31,7 @@ data class MachineSnapshot(
     val device: DiscoveredJura? = null,
     val status: MachineStatus? = null,
     val statistics: Statistics? = null,
+    val progress: BrewProgress? = null,
     val baristaLocked: Boolean = false,
     val lastUpdatedMillis: Long = 0L,
 )

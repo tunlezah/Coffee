@@ -1,5 +1,6 @@
 package com.cawfee.bluetooth.scanner
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
@@ -7,7 +8,10 @@ import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.ParcelUuid
+import androidx.core.content.ContextCompat
 import com.cawfee.bluetooth.DiscoveredJura
 import com.cawfee.bluetooth.parser.AdvertisementParser
 import com.cawfee.bluetooth.protocol.JuraGatt
@@ -33,8 +37,25 @@ class JuraScanner @Inject constructor(
 
     val isBluetoothEnabled: Boolean get() = adapter?.isEnabled == true
 
-    @SuppressLint("MissingPermission") // callers must hold BLUETOOTH_SCAN (API31+) / location (<31)
+    /** True when the runtime permission needed to scan is currently granted. */
+    val hasScanPermission: Boolean
+        get() {
+            val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                Manifest.permission.BLUETOOTH_SCAN
+            } else {
+                Manifest.permission.ACCESS_FINE_LOCATION
+            }
+            return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        }
+
+    @SuppressLint("MissingPermission") // checked via hasScanPermission below
     fun scan(): Flow<DiscoveredJura> = callbackFlow {
+        // Permissions can be revoked at any time from system settings, so the UI-layer
+        // check is not enough — fail the flow instead of throwing SecurityException.
+        if (!hasScanPermission) {
+            close(SecurityException("Bluetooth scan permission not granted"))
+            return@callbackFlow
+        }
         val scanner = adapter?.bluetoothLeScanner
             ?: run { close(IllegalStateException("Bluetooth is off or unavailable")); return@callbackFlow }
 

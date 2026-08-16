@@ -2,6 +2,7 @@ package com.cawfee.domain.rules
 
 import com.cawfee.domain.model.Cause
 import com.cawfee.domain.model.Symptom
+import java.util.Locale
 
 /** Builds the human-readable rationale. Ported from ExplanationBuilder.swift. */
 object ExplanationBuilder {
@@ -27,5 +28,5 @@ object ExplanationBuilder {
     }
 
     fun ruleSummary(rule: Rule): String =
-        "${rule.id} • ${rule.trigger.displayName} → ${rule.cause.displayName} (w=${"%.2f".format(rule.baseWeight)})"
+        "${rule.id} • ${rule.trigger.displayName} → ${rule.cause.displayName} (w=${String.format(Locale.ROOT, "%.2f", rule.baseWeight)})"
 }

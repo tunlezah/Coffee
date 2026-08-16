@@ -38,4 +38,10 @@ class MachineRangesTest {
         assertEquals(120, s.milkSeconds)
         assertEquals(TemperatureLevel.HIGH, s.temperature)
     }
+
+    @Test fun machineSettingsWithReclamps() {
+        val s = MachineSettings().with(grinder = 99, volumeML = 1)
+        assertEquals(7, s.grinder)
+        assertEquals(25, s.volumeML)
+    }
 }

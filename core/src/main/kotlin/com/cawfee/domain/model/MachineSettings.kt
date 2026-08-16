@@ -17,7 +17,7 @@ object MachineRanges {
  * Machine settings. Ported from MachineSettings.swift. Construction always clamps to the
  * valid ranges. A private primary constructor stores already-clamped values; the
  * companion `invoke` operator clamps, so `MachineSettings(grinder = 12, ...)` works as in
- * Swift while [copy]/[with] also re-clamp.
+ * Swift while [with] also re-clamps.
  */
 class MachineSettings private constructor(
     val grinder: Int,
@@ -32,7 +32,9 @@ class MachineSettings private constructor(
         volumeML: Int? = null,
         milkSeconds: Int? = null,
         temperature: TemperatureLevel? = null,
-    ): MachineSettings = MachineSettings(
+    ): MachineSettings = Companion(
+        // Route through the companion invoke so replacement values are re-clamped;
+        // calling the constructor directly here would bypass MachineRanges.
         grinder = grinder ?: this.grinder,
         strength = strength ?: this.strength,
         volumeML = volumeML ?: this.volumeML,
