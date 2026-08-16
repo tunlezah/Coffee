@@ -1,0 +1,97 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Pure-JVM domain + protocol tests run without the Android SDK.
+  unit-tests:
+    name: Core & protocol tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run core and protocol tests
+        run: ./gradlew :core:test :protocol:test
+
+  build-apk:
+    name: Build self-signed release APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Reuse a stable signing key from repo secrets when configured, so
+      # sideloaded builds can update in place. Otherwise generate a fresh
+      # self-signed key for this run (installable, but Android will require
+      # uninstall/reinstall between builds signed with different keys).
+      - name: Prepare signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.CAWFEE_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.CAWFEE_KEYSTORE_PASSWORD }}
+        run: |
+          KEYSTORE="$RUNNER_TEMP/cawfee-release.jks"
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Using keystore from repository secrets"
+            echo "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE"
+            PASSWORD="$KEYSTORE_PASSWORD"
+          else
+            echo "No keystore secret configured — generating a self-signed key"
+            PASSWORD="$(openssl rand -hex 24)"
+            keytool -genkeypair \
+              -keystore "$KEYSTORE" \
+              -storepass "$PASSWORD" \
+              -keypass "$PASSWORD" \
+              -alias cawfee \
+              -keyalg RSA -keysize 4096 -validity 10000 \
+              -dname "CN=Cawfee, OU=Cawfee, O=Cawfee, C=AU"
+          fi
+          {
+            echo "CAWFEE_KEYSTORE=$KEYSTORE"
+            echo "CAWFEE_KEY_ALIAS=cawfee"
+            echo "CAWFEE_KEYSTORE_PASSWORD=$PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Run app unit tests
+        run: ./gradlew :app:testDebugUnitTest
+
+      - name: Build signed release APK
+        run: ./gradlew :app:assembleRelease
+
+      - name: Verify APK signature
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$APK"
+          mkdir -p dist
+          cp "$APK" dist/cawfee-release.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cawfee-release-apk
+          path: dist/cawfee-release.apk
+          if-no-files-found: error
+          retention-days: 30

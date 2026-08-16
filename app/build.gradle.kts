@@ -23,6 +23,22 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
+    // Release signing for sideloadable builds. CI (and local users) provide a
+    // keystore via environment variables; when absent the release APK is built
+    // unsigned (the GitHub Actions workflow always generates a self-signed key).
+    val releaseKeystore = System.getenv("CAWFEE_KEYSTORE")
+    if (releaseKeystore != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("CAWFEE_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("CAWFEE_KEY_ALIAS") ?: "cawfee"
+                keyPassword = System.getenv("CAWFEE_KEY_PASSWORD")
+                    ?: System.getenv("CAWFEE_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -31,6 +47,7 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 
